@@ -1,53 +1,38 @@
 "use server";
 
-import { generateText, type UIMessage } from "ai";
-import { cookies } from "next/headers";
-import type { VisibilityType } from "@/components/visibility-selector";
-import { myProvider } from "@/lib/ai/providers";
+import { revalidatePath } from "next/cache";
+import redirect from "next/navigation";
+import { auth } from "@/app/(auth)/auth";
+import { type Chat } from "@/lib/db/queries.mongo";
+
 import {
-  deleteMessagesByChatIdAfterTimestamp,
-  getMessageById,
-  updateChatVisiblityById,
-} from "@/lib/db/queries";
+  deleteChat,
+  getChats,
+} from "@/lib/db/queries.mongo";
 
-export async function saveChatModelAsCookie(model: string) {
-  const cookieStore = await cookies();
-  cookieStore.set("chat-model", model);
+export async function getChatsAction() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return [];
+  }
+
+  const chats = await getChats(session.user.id);
+
+  return chats.map((chat) => ({ ...chat, _id: (chat._id as any).toString() })) as Chat[];
 }
 
-export async function generateTitleFromUserMessage({
-  message,
-}: {
-  message: UIMessage;
-}) {
-  const { text: title } = await generateText({
-    model: myProvider.languageModel("title-model"),
-    system: `\n
-    - you will generate a short title based on the first message a user begins a conversation with
-    - ensure it is not more than 80 characters long
-    - the title should be a summary of the user's message
-    - do not use quotes or colons`,
-    prompt: JSON.stringify(message),
-  });
+export async function removeChat({ id, path }: { id: string; path: string }) {
+  const session = await auth();
 
-  return title;
-}
+  if (!session) {
+    return {
+      error: "Unauthorized",
+    };
+  }
 
-export async function deleteTrailingMessages({ id }: { id: string }) {
-  const [message] = await getMessageById({ id });
+  await deleteChat(id);
 
-  await deleteMessagesByChatIdAfterTimestamp({
-    chatId: message.chatId,
-    timestamp: message.createdAt,
-  });
-}
-
-export async function updateChatVisibility({
-  chatId,
-  visibility,
-}: {
-  chatId: string;
-  visibility: VisibilityType;
-}) {
-  await updateChatVisiblityById({ chatId, visibility });
+  revalidatePath("/");
+  return revalidatePath(path);
 }

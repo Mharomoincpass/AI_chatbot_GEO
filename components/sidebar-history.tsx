@@ -120,7 +120,9 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     : false;
 
   const hasEmptyChatHistory = paginatedChatHistories
-    ? paginatedChatHistories.every((page) => page.chats.length === 0)
+    ? paginatedChatHistories.every(
+        (page) => page.chats && page.chats.length === 0
+      )
     : false;
 
   const handleDelete = () => {

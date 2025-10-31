@@ -5,8 +5,14 @@ import { auth } from "@/app/(auth)/auth";
 import { Chat } from "@/components/chat";
 import { DataStreamHandler } from "@/components/data-stream-handler";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
-import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
+import { getChatById } from "@/lib/db/queries.mongo";
 import { convertToUIMessages } from "@/lib/utils";
+
+import { type Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Chat",
+};
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -19,18 +25,12 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   const session = await auth();
 
-  if (!session) {
-    redirect("/api/auth/guest");
+  if (!session?.user) {
+    redirect(`/login?next=/chat/${id}`);
   }
 
-  if (chat.visibility === "private") {
-    if (!session.user) {
-      return notFound();
-    }
-
-    if (session.user.id !== chat.userId) {
-      return notFound();
-    }
+  if (chat.userId !== session.user.id) {
+    notFound();
   }
 
   const messagesFromDb = await getMessagesByChatId({

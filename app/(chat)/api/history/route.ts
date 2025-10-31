@@ -1,3 +1,4 @@
+// app/(chat)/api/history/route.ts
 import type { NextRequest } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 import { getChatsByUserId, deleteAllChatsByUserId } from "@/lib/db/queries";
@@ -18,9 +19,8 @@ export async function GET(request: NextRequest) {
   }
 
   const session = await auth();
-
   if (!session?.user) {
-    return new ChatSDKError("unauthorized:chat").toResponse();
+    return Response.json([], { status: 200 });
   }
 
   const chats = await getChatsByUserId({
@@ -30,14 +30,16 @@ export async function GET(request: NextRequest) {
     endingBefore,
   });
 
-  return Response.json(chats);
+  return Response.json(chats, { status: 200 });
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const session = await auth();
-
   if (!session?.user) {
-    return new ChatSDKError("unauthorized:chat").toResponse();
+    return new ChatSDKError(
+      "unauthorized:chat",
+      "You must be signed in to delete chats."
+    ).toResponse();
   }
 
   const result = await deleteAllChatsByUserId({ userId: session.user.id });

@@ -1,52 +1,57 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { Chat } from "@/components/chat";
-import { DataStreamHandler } from "@/components/data-stream-handler";
-import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
-import { generateUUID } from "@/lib/utils";
-import { auth } from "../(auth)/auth";
+import { nanoid } from "@/lib/utils";
+import { auth } from "@/app/(auth)/auth";
+import { getUser } from "@/lib/db/queries.mongo";
+
+export const metadata = {
+  title: "Next.js AI Chatbot",
+};
+
+const GUEST_USER_ID_COOKIE = "guest_user_id";
 
 export default async function Page() {
+  const id = nanoid();
   const session = await auth();
+  const cookieStore = cookies();
 
-  if (!session) {
-    redirect("/api/auth/guest");
-  }
+  let userId = session?.user?.id;
 
-  const id = generateUUID();
+  if (!userId) {
+    let guestId = cookieStore.get(GUEST_USER_ID_COOKIE)?.value;
+    if (guestId) {
+      const guest = await getUser(guestId);
+      if (!guest) guestId = undefined;
+    }
 
-  const cookieStore = await cookies();
-  const modelIdFromCookie = cookieStore.get("chat-model");
+    // ✅ Compute absolute URL safely for both local and deployed environments
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000");
 
-  if (!modelIdFromCookie) {
-    return (
-      <>
-        <Chat
-          autoResume={false}
-          id={id}
-          initialChatModel={DEFAULT_CHAT_MODEL}
-          initialMessages={[]}
-          initialVisibilityType="private"
-          isReadonly={false}
-          key={id}
-        />
-        <DataStreamHandler />
-      </>
-    );
+    if (!guestId) {
+      const res = await fetch(`${baseUrl}/api/guest`, {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      guestId = data.id;
+    }
+
+    userId = guestId;
   }
 
   return (
-    <>
-      <Chat
-        autoResume={false}
-        id={id}
-        initialChatModel={modelIdFromCookie.value}
-        initialMessages={[]}
-        initialVisibilityType="private"
-        isReadonly={false}
-        key={id}
-      />
-      <DataStreamHandler />
-    </>
+    <Chat
+      id={id}
+      initialMessages={[]}
+      initialChatModel="chat-model"
+      initialVisibilityType="private"
+      isReadonly={false}
+      autoResume={false}
+    />
   );
 }
